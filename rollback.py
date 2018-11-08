@@ -4,7 +4,8 @@ import pytz
 import sqlite3
 
 db = sqlite3.connect("accounts.sqlite")
-db.execute('CREATE TABLE IF NOT EXISTS accounts (name TEXT PRIMARY KEY NOT NULL, balance INTEGER NOT NULL)')
+db.execute('CREATE TABLE IF NOT EXISTS accounts (name TEXT PRIMARY KEY NOT NULL, balance INTEGER NOT NULL, '
+           'class_object INTEGER NOT NULL)')
 db.execute('CREATE TABLE IF NOT EXISTS history (time TIMESTAMP NOT NULL, account TEXT NOT NULL, '
            'amount INTEGER NOT NULL, time_object INTEGER NOT NULL, PRIMARY KEY(time, account))')
 
@@ -22,16 +23,17 @@ class Account:
         return time, time_object
 
     def __init__(self, name: str, opening_balance: int = 0):
-        cusor = db.execute("SELECT name, balance FROM accounts WHERE (name = ?)", (name,))
-        row = cusor.fetchone()
+        cursor = db.execute("SELECT name, balance FROM accounts WHERE (name = ?)", (name,))
+        row = cursor.fetchone()
         if row:
             self.name, self._balance = row
-            print("Retrieved record for {}. ".format(self.name), end="")
+            print("{} account already exist, choose different name. Retrieved record for {}."
+                  .format(self.name, self.name), end=" ")
         else:
             self.name = name
             self._balance = opening_balance
-            cusor.execute("INSERT INTO accounts VALUES (?, ?)", (name, opening_balance))
-            cusor.connection.commit()
+            cursor.execute("INSERT INTO accounts VALUES (?, ?, ?)", (name, opening_balance, 0))
+            cursor.connection.commit()
             print("Account created for {}. ".format(self.name), end="")
         self.show_balance()
 
@@ -68,4 +70,42 @@ class Account:
 
 
 if __name__ == "__main__":
-    pass
+
+    while True:
+        type_operation = input("Enter what kind operation you would like do: Create account - C, Deposit - D, "
+                               "Withdraw - W, Show Balance - S, Quit - Q.").upper()
+        if type_operation.upper() == "Q" or type_operation.upper() == "QUIT":
+            break
+
+        elif type_operation == "C" or type_operation == "CREATE":
+            user_name = input("Enter the name of account.")
+            balance = 0
+            try:
+                balance = int(input("Enter the opening balance (float) or press enter (default balance = 0)."))
+            except ValueError:
+                print("Opening balance = 0.")
+            user = Account(name=user_name, opening_balance=balance*100)
+            class_object = pickle.dumps(user)
+            db.execute("UPDATE accounts SET class_object =?", (class_object,))
+
+        elif type_operation == "D" or type_operation == "DEPOSIT":
+            user = None
+            account_name = input("Enter the name of account to record the deposit.")
+            try:
+                user = db.execute("SELECT class_object FROM accounts WHERE name = ?", (account_name,)).fetchone()[0]
+            except TypeError:
+                print("{} bank account doesn't exists, process stopped.".format(account_name))
+
+            if user:
+                user = pickle.loads(user)
+                try:
+                    deposit_amount = int(input("Enter the amount to deposit."))
+                except ValueError:
+                    print("Entered incorrect value you have written {}, it should been integer or float. "
+                          "Process stopped.".format(type(account_name)))
+                    continue
+                user.deposit(amount=deposit_amount)
+
+        else:
+            print("Entered incorrect letter.")
+            continue
